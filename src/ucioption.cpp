@@ -160,3 +160,91 @@ Option& Option::operator=(const string& v) {
 }
 
 } // namespace UCI
+
+
+
+/// Tuning Framework. Fully separated from SF code, appended here to avoid
+/// adding a *.cpp file and to modify Makefile.
+
+#include <iostream>
+#include <sstream>
+
+// Default Range function, to calculate Option's min-max values
+Range default_range(int v) {
+  return v > 0 ? Range(0, 2 * v) : Range(2 * v, 0);
+}
+
+SetRange SetDefaultRange(default_range);
+
+std::vector<string> Parse::split(const std::string& names) {
+
+  size_t in_expression = 0; // Like SetRange(-100, 100)
+  string token;
+  std::vector<string> v;
+  std::stringstream ss(names.substr(1, names.size() - 2)); // Remove trailing parenthesis
+
+  while (std::getline(ss, token, ','))
+  {
+      std::stringstream ws(token);
+      ws >> token; // Remove trailing whitespaces
+
+      if (in_expression)
+          v.front().append("," + token);
+      else
+          v.insert(v.begin(), token);
+
+      in_expression +=  std::count(token.begin(), token.end(), '(')
+                      - std::count(token.begin(), token.end(), ')');
+  }
+
+  return v;
+}
+
+void Tune::EntryBase::make_option(const string& n, int v, const SetRange& r) {
+
+  // Do not generate option when there is nothing to tune (ie. min = max)
+  if (r(v).first == r(v).second)
+      return;
+
+  Options[n] << UCI::Option(v, r(v).first, r(v).second, Tune::on_tune);
+
+  // Print formatted parameters, ready to be copy-pasted in fishtest
+  std::cout << n << ","
+            << v << ","
+            << r(v).first << "," << r(v).second << ","
+            << (r(v).second - r(v).first) / 20.0 << ","
+            << "0.0020"
+            << std::endl;
+}
+
+template<> void Tune::Entry<int>::make_option() {
+  EntryBase::make_option(name, value, range);
+}
+
+template<> void Tune::Entry<int>::read_option() {
+  if (range(value).first != range(value).second)
+      value = Options[name];
+}
+
+template<> void Tune::Entry<Value>::make_option() {
+  EntryBase::make_option(name, value, range);
+}
+
+template<> void Tune::Entry<Value>::read_option() {
+  if (range(value).first != range(value).second)
+      value = Value(int(Options[name]));
+}
+
+template<> void Tune::Entry<Score>::make_option() {
+  EntryBase::make_option("m" + name, mg_value(value), range);
+  EntryBase::make_option("e" + name, eg_value(value), range);
+}
+
+template<> void Tune::Entry<Score>::read_option() {
+  if (range(value).first != range(value).second)
+      value = make_score(Options["m" + name], Options["e" + name]);
+}
+
+// Instead of a variable here we have a PostUpdate function: just call it
+template<> void Tune::Entry<Tune::PostUpdate>::make_option() {}
+template<> void Tune::Entry<Tune::PostUpdate>::read_option() { value(); }
