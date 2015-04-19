@@ -69,6 +69,14 @@ namespace {
   Value razor_margin(Depth d) { return Value(512 + 32 * d); }
   Value futility_margin(Depth d) { return Value(200 * d); }
 
+  int A = 823, B = 67, C = 16, D = 16 * 3;
+
+  Depth null_depth(Depth d, Value delta) {
+    return ((A + B * d) / 256 + std::min(C * delta / PawnValueMg, D) / 16) * ONE_PLY;
+  }
+
+  TUNE(A,B,C,D);
+
   // Futility and reductions lookup tables, initialized at startup
   int FutilityMoveCounts[2][16];  // [improving][depth]
   Depth Reductions[2][2][64][64]; // [pv][improving][depth][moveNumber]
@@ -711,7 +719,7 @@ namespace {
         assert(eval - beta >= 0);
 
         // Null move dynamic reduction based on depth and value
-        Depth R = ((823 + 67 * depth) / 256 + std::min((eval - beta) / PawnValueMg, 3)) * ONE_PLY;
+        Depth R = null_depth(depth, eval - beta);
 
         pos.do_null_move(st);
         (ss+1)->skipEarlyPruning = true;
